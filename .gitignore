@@ -1,0 +1,9 @@
+logs/
+*.har
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.env
+secrets.yaml
+debug_*.html
