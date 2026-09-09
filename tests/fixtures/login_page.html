@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="de">
+<head><meta charset="utf-8"><title>Stadtwerke Elbtal - Onlineservice</title></head>
+<body>
+  <form id="loginProcessForm" action="/powercommerce/swet/fo/portal/loginProcess" method="post">
+    <input type="hidden" name="_csrf" value="test-csrf-token">
+    <input id="login" type="text" name="login" class="form-control">
+    <input id="password" type="password" name="password" value="" class="form-control">
+    <input id="twoFactorAuthenticationCode" type="text" name="twoFactorAuthenticationCode"
+           class="form-control" autocomplete="off" maxlength="60">
+    <button name="button.login.widget" type="submit">Anmelden</button>
+  </form>
+</body>
+</html>
