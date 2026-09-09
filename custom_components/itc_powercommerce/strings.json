@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select your utility",
+        "description": "Pick your utility company. If it is not listed, choose \"Andere / Other\" and enter the portal address yourself.",
+        "data": {
+          "utility": "Utility"
+        }
+      },
+      "manual": {
+        "title": "Portal address",
+        "description": "The portal URL looks like https://example.de/powercommerce/<tenant>/fo/portal/. Enter the part before /powercommerce as the host and the tenant separately.",
+        "data": {
+          "host": "Host",
+          "tenant": "Tenant"
+        }
+      },
+      "credentials": {
+        "title": "Portal login",
+        "description": "Your login for {host}. The credentials are verified by an actual login.",
+        "data": {
+          "username": "Email address",
+          "password": "Password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate",
+        "description": "The portal rejected the stored credentials for {username}. Enter the current password.",
+        "data": {
+          "username": "Email address",
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Invalid credentials, or the portal requires a two-factor code.",
+      "cannot_connect": "Could not reach the portal.",
+      "no_meter": "The login worked, but the account has no electricity meter.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This meter is already configured.",
+      "reauth_successful": "Re-authentication was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling intervals",
+        "description": "The current reading is fetched from a small JSON endpoint; the reading history is a full page and only feeds the statistics backfill.",
+        "data": {
+          "meter_interval_hours": "Current reading, every ... hours",
+          "history_interval_hours": "Reading history, every ... hours"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "meter_reading": {
+        "name": "Meter reading"
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Versorger auswählen",
+        "description": "Wähle deinen Versorger. Steht er nicht in der Liste, wähle \"Andere / Other\" und gib die Portaladresse selbst ein.",
+        "data": {
+          "utility": "Versorger"
+        }
+      },
+      "manual": {
+        "title": "Portaladresse",
+        "description": "Die Portal-URL sieht aus wie https://example.de/powercommerce/<mandant>/fo/portal/. Trage den Teil vor /powercommerce als Host ein und den Mandanten separat.",
+        "data": {
+          "host": "Host",
+          "tenant": "Mandant"
+        }
+      },
+      "credentials": {
+        "title": "Portal-Anmeldung",
+        "description": "Deine Zugangsdaten für {host}. Sie werden mit einer echten Anmeldung geprüft.",
+        "data": {
+          "username": "E-Mail-Adresse",
+          "password": "Passwort"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Erneut anmelden",
+        "description": "Das Portal hat die gespeicherten Zugangsdaten für {username} abgelehnt. Bitte das aktuelle Passwort eingeben.",
+        "data": {
+          "username": "E-Mail-Adresse",
+          "password": "Passwort"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Zugangsdaten falsch, oder das Portal verlangt einen Zwei-Faktor-Code.",
+      "cannot_connect": "Das Portal war nicht erreichbar.",
+      "no_meter": "Die Anmeldung hat geklappt, aber im Konto liegt kein Stromzähler.",
+      "unknown": "Unerwarteter Fehler."
+    },
+    "abort": {
+      "already_configured": "Dieser Zähler ist bereits eingerichtet.",
+      "reauth_successful": "Die erneute Anmeldung war erfolgreich."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Abfrageintervalle",
+        "description": "Der aktuelle Zählerstand kommt aus einem kleinen JSON-Endpunkt; die Ablesehistorie ist eine ganze Seite und speist nur den Statistik-Import.",
+        "data": {
+          "meter_interval_hours": "Aktueller Zählerstand, alle ... Stunden",
+          "history_interval_hours": "Ablesehistorie, alle ... Stunden"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "meter_reading": {
+        "name": "Zählerstand"
+      }
+    }
+  }
+}

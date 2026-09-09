@@ -12,7 +12,14 @@ import logging
 import sys
 from datetime import date, datetime
 
-from .client import DEFAULT_HOST, DEFAULT_TENANT, ITCPowerCommerceClient
+import aiohttp
+
+from .client import (
+    DEFAULT_HOST,
+    DEFAULT_TENANT,
+    USER_AGENT,
+    ITCPowerCommerceClient,
+)
 from .exceptions import PortalError
 from .models import Reading
 
@@ -37,11 +44,6 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--start", type=_parse_date, help="earliest date (YYYY-MM-DD)")
     parser.add_argument("--end", type=_parse_date, help="latest date (YYYY-MM-DD)")
     parser.add_argument(
-        "--debug",
-        metavar="DIR",
-        help="write each portal response to DIR for inspection",
-    )
-    parser.add_argument(
         "-v", "--verbose", action="store_true", help="enable debug logging"
     )
     return parser
@@ -64,13 +66,16 @@ def _print_table(readings: list[Reading]) -> None:
 
 async def _run(args: argparse.Namespace) -> int:
     password = args.password or getpass.getpass("Portal password: ")
-    async with ITCPowerCommerceClient(
-        args.user,
-        password,
-        host=args.host,
-        tenant=args.tenant,
-        debug_dir=args.debug,
-    ) as client:
+    # The client never owns a session; in Home Assistant it is handed the
+    # shared one, here the CLI opens and closes its own.
+    async with aiohttp.ClientSession(headers={"User-Agent": USER_AGENT}) as session:
+        client = ITCPowerCommerceClient(
+            args.user,
+            password,
+            session,
+            host=args.host,
+            tenant=args.tenant,
+        )
         try:
             await client.login()
             meters = await client.get_meters()

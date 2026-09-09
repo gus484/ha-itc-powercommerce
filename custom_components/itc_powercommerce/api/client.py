@@ -9,9 +9,13 @@ Observed flow (from Phase 0 recon):
     GET  /meterWidget.json  -> meters + latest reading (JSON)
     GET  /meterDetails      -> reading history (HTML table)
 
-Login is a plain form POST; no Spring Web Flow ``execution`` token or CSRF
-field was observed. Hidden fields on the login form are still collected and
-echoed back generically, so the client survives a portal update that adds one.
+Login is a plain form POST of exactly three fields; the captures show no
+Spring Web Flow ``execution`` token, no CSRF field, and no hidden inputs on
+the login form at all.
+
+This module deliberately knows nothing about Home Assistant. The caller owns
+the :class:`aiohttp.ClientSession` and passes it in — inside Home Assistant
+that is ``async_get_clientsession(hass)``, in the CLI a session of its own.
 """
 
 from __future__ import annotations
@@ -19,11 +23,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import date
-from pathlib import Path
-from types import TracebackType
 
 import aiohttp
-from bs4 import BeautifulSoup
 
 from .exceptions import AuthError, ParseError, PortalError, SessionExpired
 from .models import Meter, Reading
@@ -43,85 +44,72 @@ USER_AGENT = (
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# meterWidget.json is requested with the same query the portal's own frontend
+# uses; the cache-busting `_` param it also sends is not needed.
+METER_WIDGET_VIEW = "meterWidget.json?responsiveDesign=true"
+
 
 class ITCPowerCommerceClient:
     """Reads meters and readings from an ITC PowerCommerce portal.
 
-    Use as an async context manager so the underlying session is closed::
+    The session is supplied and owned by the caller::
 
-        async with ITCPowerCommerceClient(user, password) as client:
-            await client.login()
-            meters = await client.get_meters()
+        client = ITCPowerCommerceClient(user, password, session)
+        await client.login()
+        meters = await client.get_meters()
     """
 
     def __init__(
         self,
         username: str,
         password: str,
+        session: aiohttp.ClientSession,
         *,
         host: str = DEFAULT_HOST,
         tenant: str = DEFAULT_TENANT,
-        session: aiohttp.ClientSession | None = None,
-        debug_dir: str | Path | None = None,
     ) -> None:
         self._username = username
         self._password = password
-        self._base = f"{host.rstrip('/')}/powercommerce/{tenant}/fo/portal"
-        self._external_session = session is not None
+        self._host = host.rstrip("/")
+        self._tenant = tenant
+        self._base = f"{self._host}/powercommerce/{tenant}/fo/portal"
         self._session = session
         self._logged_in = False
-        self._debug_dir = Path(debug_dir) if debug_dir else None
-        self._debug_seq = 0
-        if self._debug_dir:
-            self._debug_dir.mkdir(parents=True, exist_ok=True)
 
-    # -- context management -------------------------------------------------
+    # -- introspection ------------------------------------------------------
 
-    async def __aenter__(self) -> "ITCPowerCommerceClient":
-        if self._session is None:
-            self._session = aiohttp.ClientSession(
-                headers={"User-Agent": USER_AGENT}
-            )
-        return self
+    @property
+    def host(self) -> str:
+        return self._host
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: TracebackType | None,
-    ) -> None:
-        if self._session is not None and not self._external_session:
-            await self._session.close()
+    @property
+    def tenant(self) -> str:
+        return self._tenant
+
+    @property
+    def logged_in(self) -> bool:
+        return self._logged_in
 
     # -- low-level helpers --------------------------------------------------
 
     def _url(self, view: str) -> str:
         return f"{self._base}/{view}"
 
-    def _dump(self, name: str, text: str) -> None:
-        if not self._debug_dir:
-            return
-        self._debug_seq += 1
-        path = self._debug_dir / f"{self._debug_seq:02d}_{name}.html"
-        path.write_text(text, encoding="utf-8")
-        _LOGGER.debug("wrote debug response %s", path)
-
     async def _get_text(self, view: str) -> str:
-        assert self._session is not None
-        url = self._url(view)
-        async with self._session.get(url) as resp:
-            text = await resp.text()
-        self._dump(view.split("?")[0].replace("/", "_"), text)
-        return text
+        async with self._session.get(
+            self._url(view), headers={"User-Agent": USER_AGENT}
+        ) as resp:
+            return await resp.text()
 
     async def _get_json(self, view: str) -> dict:
-        assert self._session is not None
-        url = self._url(view)
         async with self._session.get(
-            url, headers={"X-Requested-With": "XMLHttpRequest"}
+            self._url(view),
+            headers={
+                "User-Agent": USER_AGENT,
+                "X-Requested-With": "XMLHttpRequest",
+            },
         ) as resp:
             text = await resp.text()
-        self._dump(view.split("?")[0].replace("/", "_") + "_json", text)
         if is_login_page(text):
             raise SessionExpired(f"{view} returned the login page")
         try:
@@ -133,24 +121,21 @@ class ITCPowerCommerceClient:
 
     async def login(self) -> None:
         """Authenticate. Raises :class:`AuthError` on failure."""
-        assert self._session is not None, "use within 'async with'"
+        # 1. GET /start to obtain a JSESSIONID.
+        await self._get_text("start")
 
-        # 1. GET /start to obtain a JSESSIONID and the login form.
-        start_html = await self._get_text("start")
-        hidden = self._collect_hidden_fields(start_html, form_id="loginProcessForm")
-
-        # 2. POST credentials. Hidden fields are echoed back generically.
+        # 2. POST the three fields the portal's login form actually submits.
         payload = {
-            **hidden,
             "login": self._username,
             "password": self._password,
             "twoFactorAuthenticationCode": "",
         }
         async with self._session.post(
-            self._url("loginProcess"), data=payload
+            self._url("loginProcess"),
+            data=payload,
+            headers={"User-Agent": USER_AGENT},
         ) as resp:
             landing = await resp.text()
-        self._dump("loginProcess", landing)
 
         # On success the portal 302-redirects to /home (aiohttp follows it).
         # On failure it re-renders the login page.
@@ -158,15 +143,10 @@ class ITCPowerCommerceClient:
             raise AuthError("login failed: check credentials or 2FA requirement")
         self._logged_in = True
 
-    def _collect_hidden_fields(self, html: str, *, form_id: str) -> dict[str, str]:
-        soup = BeautifulSoup(html, "html.parser")
-        form = soup.find("form", id=form_id) or soup
-        fields: dict[str, str] = {}
-        for inp in form.find_all("input", attrs={"type": "hidden"}):
-            name = inp.get("name")
-            if name:
-                fields[name] = inp.get("value", "")
-        return fields
+    async def async_ensure_login(self) -> None:
+        """Log in unless this client already holds a session."""
+        if not self._logged_in:
+            await self.login()
 
     async def _ensure_session(self, coro_factory):
         """Run a request; on :class:`SessionExpired`, re-login once and retry."""
@@ -186,18 +166,24 @@ class ITCPowerCommerceClient:
     async def get_meters(self) -> list[Meter]:
         """Return the meters on the account (from ``meterWidget.json``)."""
         self._require_login()
-        payload = await self._ensure_session(
-            lambda: self._get_json("meterWidget.json?responsiveDesign=true")
-        )
+        payload = await self._ensure_session(lambda: self._get_json(METER_WIDGET_VIEW))
         return parse_meter_widget(payload)
 
     async def get_latest_readings(self) -> list[Reading]:
         """Return the most recent reading per meter/tariff (JSON, fast path)."""
         self._require_login()
-        payload = await self._ensure_session(
-            lambda: self._get_json("meterWidget.json?responsiveDesign=true")
-        )
+        payload = await self._ensure_session(lambda: self._get_json(METER_WIDGET_VIEW))
         return parse_latest_readings(payload)
+
+    async def get_meters_and_readings(self) -> tuple[list[Meter], list[Reading]]:
+        """Return meters and their latest readings from a single request.
+
+        The coordinator needs both on every poll; calling the two methods
+        above would fetch the same payload twice.
+        """
+        self._require_login()
+        payload = await self._ensure_session(lambda: self._get_json(METER_WIDGET_VIEW))
+        return parse_meter_widget(payload), parse_latest_readings(payload)
 
     async def get_readings(
         self,

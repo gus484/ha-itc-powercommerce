@@ -11,8 +11,8 @@ from decimal import Decimal
 
 import pytest
 
-from custom_components.itc_powercommerce.api.exceptions import ParseError
-from custom_components.itc_powercommerce.api.parsing import (
+from api.exceptions import ParseError
+from api.parsing import (
     is_login_page,
     parse_german_date,
     parse_german_decimal,
