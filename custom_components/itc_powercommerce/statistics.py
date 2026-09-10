@@ -138,6 +138,16 @@ async def async_import_readings(
         metadata["mean_type"] = StatisticMeanType.NONE
     if "has_mean" in _METADATA_KEYS:
         metadata["has_mean"] = False
+    if "unit_class" in _METADATA_KEYS:
+        # The recorder needs the unit-conversion class so it can offer the
+        # series in the user's preferred energy unit. Everything here is
+        # filtered to kWh above, so this is always energy. Read the value off
+        # the converter rather than hardcoding the "energy" string.
+        from homeassistant.util.unit_conversion import (  # noqa: PLC0415
+            EnergyConverter,
+        )
+
+        metadata["unit_class"] = EnergyConverter.UNIT_CLASS
 
     async_add_external_statistics(hass, metadata, rows)
     _LOGGER.debug(
