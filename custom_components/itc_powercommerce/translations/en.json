@@ -10,7 +10,7 @@
       },
       "manual": {
         "title": "Portal address",
-        "description": "The portal URL looks like https://example.de/powercommerce/<tenant>/fo/portal/. Enter the part before /powercommerce as the host and the tenant separately.",
+        "description": "For {example_name} the portal URL is {example_url}. The part before /powercommerce is the host ({example_host}), the part after it is the tenant ({example_tenant}). Enter the same two parts of your utility's portal URL.",
         "data": {
           "host": "Host",
           "tenant": "Tenant"

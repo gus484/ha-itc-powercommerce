@@ -160,7 +160,22 @@ class ITCPowerCommerceConfigFlow(ConfigFlow, domain=DOMAIN):
             self._host = user_input[CONF_HOST].rstrip("/")
             self._tenant = user_input[CONF_TENANT].strip()
             return await self.async_step_credentials()
-        return self.async_show_form(step_id="manual", data_schema=MANUAL_SCHEMA)
+        # hassfest rejects URLs in translation strings, so the example address
+        # comes in as placeholders — taken from a real tenant rather than a
+        # "<tenant>" pattern, which the frontend's Markdown would swallow.
+        example = KNOWN_UTILITIES["swet"]
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=MANUAL_SCHEMA,
+            description_placeholders={
+                "example_name": example["name"],
+                "example_url": (
+                    f"{example['host']}/powercommerce/{example['tenant']}/fo/portal/"
+                ),
+                "example_host": example["host"],
+                "example_tenant": example["tenant"],
+            },
+        )
 
     async def async_step_credentials(
         self, user_input: dict[str, Any] | None = None

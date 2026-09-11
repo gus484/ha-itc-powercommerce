@@ -10,7 +10,7 @@
       },
       "manual": {
         "title": "Portaladresse",
-        "description": "Die Portal-URL sieht aus wie https://example.de/powercommerce/<mandant>/fo/portal/. Trage den Teil vor /powercommerce als Host ein und den Mandanten separat.",
+        "description": "Bei {example_name} lautet die Portal-URL {example_url}. Der Teil vor /powercommerce ist der Host ({example_host}), der Teil danach der Mandant ({example_tenant}). Trage dieselben beiden Teile aus der Portal-URL deines Versorgers ein.",
         "data": {
           "host": "Host",
           "tenant": "Mandant"
