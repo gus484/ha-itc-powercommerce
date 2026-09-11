@@ -33,9 +33,19 @@ Not available yet. The target is installation via HACS as a custom repository.
   views show nothing useful.
 - The **first imported month shows 0 kWh**. There is no earlier reading to take a
   difference against.
-- **Missing months are merged into the next reading.** If the portal has no reading
-  for October and November, the December bar holds all three months. Two readings in
-  one month (a self-reported one plus the regular one) simply add up in that month.
+- **Consumption lands in the month of the reading that closes it.** Home Assistant
+  only sees the difference between two readings and books it on the date of the
+  later one; it cannot know how that consumption was spread over the time in between.
+  Most portal readings fall on month ends, which gives one correct bar per month.
+  Where they do not, bars shift:
+  - Missing months merge into the next reading. With no reading for October and
+    November, the December bar holds all three months.
+  - A reading in the middle of a month splits consumption at that date. With a
+    reading on 14 May and the next on 20 June, May only covers the time up to the
+    14th, and June carries everything from 14 May to its own month end, so June
+    looks too high and May too low.
+  - Two readings in one month (for example a self-reported one plus the regular one)
+    simply add up in that month.
 - In the Energy Dashboard, pick the statistic named **"Strom &lt;meter number&gt;"**
   (`itc_powercommerce:…`) as grid consumption, **not** the meter-reading sensor.
   The sensor only knows readings from the day it was set up; the statistic carries
