@@ -51,6 +51,29 @@ async def test_login_posts_only_the_three_observed_fields(
     assert body["twoFactorAuthenticationCode"] == ""
 
 
+async def test_login_starts_from_an_empty_portal_cookie_jar(
+    login_page, home_page
+) -> None:
+    """A stale JSESSIONID must not survive into a new login.
+
+    Logging in on top of one made the portal serve a meterWidget.json without
+    meters and then reject the next login as bad credentials.
+    """
+    async with aiohttp.ClientSession() as session:
+        session.cookie_jar.update_cookies({"JSESSIONID": "stale"}, URL(BASE))
+        session.cookie_jar.update_cookies({"other": "keep"}, URL("https://example.org/"))
+        client = ITCPowerCommerceClient("user", "secret", session)
+        with aioresponses() as m:
+            m.get(f"{BASE}/start", body=login_page)
+            m.post(f"{BASE}/loginProcess", body=home_page)
+            await client.login()
+
+        assert "JSESSIONID" not in session.cookie_jar.filter_cookies(URL(BASE))
+        # Only the portal's cookies go; the jar is not the client's to wipe.
+        assert "other" in session.cookie_jar.filter_cookies(URL("https://example.org/"))
+    assert client.logged_in is True
+
+
 async def test_login_failure_raises(client, login_page) -> None:
     with aioresponses() as m:
         m.get(f"{BASE}/start", body=login_page)

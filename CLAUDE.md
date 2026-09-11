@@ -112,8 +112,16 @@ hacs.json
 
 ## Porting the client
 
-- Replace the client's own `ClientSession` with `async_get_clientsession(hass)`.
-  This is the single largest change from script to integration.
+- Replace the client's own `ClientSession` with `async_create_clientsession(hass)`,
+  **not** `async_get_clientsession(hass)`. The portal authenticates with a session
+  cookie, and the shared session's cookie jar keeps it across a config entry reload:
+  the next login ran on top of the stale JSESSIONID, got a meterWidget.json without
+  meters, and the retry was rejected as bad credentials — which triggers reauth and
+  counts toward an account lock. Created in `async_setup_entry`, HA detaches the
+  session on unload. The config flow uses a throwaway one (`auto_cleanup=False` plus
+  `detach()`).
+- `login()` also clears the portal's cookies before it starts, so the in-session
+  re-login after expiry is a fresh login too.
 - Drop the `--debug` response dumper and the local response cache.
 - Keep all blocking work out of the event loop; the client is already async.
 

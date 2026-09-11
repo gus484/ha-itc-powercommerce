@@ -14,7 +14,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 from homeassistant.helpers.selector import (
     NumberSelector,
     NumberSelectorConfig,
@@ -81,15 +81,17 @@ async def async_validate_login(
     A config flow that only checked the form fields would happily store
     credentials the portal rejects.
     """
-    client = ITCPowerCommerceClient(
-        username,
-        password,
-        async_get_clientsession(hass),
-        host=host,
-        tenant=tenant,
-    )
-    await client.login()
-    meters = [m for m in await client.get_meters() if is_power_meter(m)]
+    # A throwaway session, so the validation login's cookie ends up neither in
+    # HA's shared jar nor in the entry's session.
+    session = async_create_clientsession(hass, auto_cleanup=False)
+    try:
+        client = ITCPowerCommerceClient(
+            username, password, session, host=host, tenant=tenant
+        )
+        await client.login()
+        meters = [m for m in await client.get_meters() if is_power_meter(m)]
+    finally:
+        session.detach()
     if not meters:
         raise NoElectricityMeter
     return meters[0].meter_no

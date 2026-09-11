@@ -58,7 +58,12 @@ def parse_meter_widget(payload: dict) -> list[Meter]:
     try:
         sub_elements = payload["model"]["subElements"]
     except (KeyError, TypeError) as exc:
-        raise ParseError("meterWidget.json missing model.subElements") from exc
+        # Key names only, never values — enough to tell an error payload from
+        # a changed schema without putting account data into the log.
+        keys = sorted(payload) if isinstance(payload, dict) else type(payload).__name__
+        raise ParseError(
+            f"meterWidget.json missing model.subElements (top-level: {keys})"
+        ) from exc
 
     meters: list[Meter] = []
     for el in sub_elements:

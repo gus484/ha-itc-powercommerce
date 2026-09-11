@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.aiohttp_client import async_create_clientsession
 
 from .api import ITCPowerCommerceClient
 from .const import CONF_TENANT
@@ -23,7 +23,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ITCConfigEntry) -> bool:
     client = ITCPowerCommerceClient(
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
-        async_get_clientsession(hass),
+        # Its own cookie jar: the portal session is a cookie, and the shared
+        # session would keep it across reloads and hand it to the next client.
+        # Created during setup, so HA detaches it again on unload.
+        async_create_clientsession(hass),
         host=entry.data[CONF_HOST],
         tenant=entry.data[CONF_TENANT],
     )

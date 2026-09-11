@@ -15,7 +15,9 @@ the login form at all.
 
 This module deliberately knows nothing about Home Assistant. The caller owns
 the :class:`aiohttp.ClientSession` and passes it in — inside Home Assistant
-that is ``async_get_clientsession(hass)``, in the CLI a session of its own.
+that is ``async_create_clientsession(hass)``, in the CLI a session of its own.
+Authentication is a session cookie, so the session should not be one whose
+cookie jar is shared with unrelated code.
 """
 
 from __future__ import annotations
@@ -25,6 +27,7 @@ import logging
 from datetime import date
 
 import aiohttp
+from yarl import URL
 
 from .exceptions import AuthError, ParseError, PortalError, SessionExpired
 from .models import Meter, Reading
@@ -71,6 +74,7 @@ class ITCPowerCommerceClient:
         self._username = username
         self._password = password
         self._host = host.rstrip("/")
+        self._cookie_domain = URL(self._host).host or ""
         self._tenant = tenant
         self._base = f"{self._host}/powercommerce/{tenant}/fo/portal"
         self._session = session
@@ -121,6 +125,13 @@ class ITCPowerCommerceClient:
 
     async def login(self) -> None:
         """Authenticate. Raises :class:`AuthError` on failure."""
+        # 0. Start from an empty jar for the portal. A login on top of an old
+        #    JSESSIONID is not a fresh login: after a config entry reload the
+        #    portal accepted it, then served a meterWidget.json without meters,
+        #    and rejected the very next attempt as bad credentials.
+        self._session.cookie_jar.clear_domain(self._cookie_domain)
+        self._logged_in = False
+
         # 1. GET /start to obtain a JSESSIONID.
         await self._get_text("start")
 
