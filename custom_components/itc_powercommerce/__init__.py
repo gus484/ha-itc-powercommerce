@@ -36,6 +36,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ITCConfigEntry) -> bool:
     # backfill, so a portal markup change there must not take the current
     # reading down with it. A failure is logged and retried on the next tick.
     await history.async_refresh()
+    # A coordinator only reschedules itself while something listens, and no
+    # entity listens to the history. Without this it would run once at setup
+    # and never again until the next restart.
+    entry.async_on_unload(history.async_add_listener(lambda: None))
 
     entry.runtime_data = ITCRuntimeData(client=client, meter=meter, history=history)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)

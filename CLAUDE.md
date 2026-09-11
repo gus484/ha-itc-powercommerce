@@ -147,11 +147,22 @@ sensor cannot backfill the past.
 - `readingDate` is `DD.MM.YYYY` with no time. Build midnight in `Europe/Berlin`, then
   `dt_util.as_utc`. **`start` must be hour-aligned and timezone-aware** or the recorder
   rejects the row.
-- `sum` can simply be the meter reading — HA derives consumption from the delta
-  between consecutive `sum` values. The only hard requirement is that it never
-  decreases. There is no `last_reset` for external statistics.
+- `state` is the meter reading; `sum` is the meter reading **minus a baseline**, so
+  the oldest row has `sum = 0`. HA derives consumption from the delta between
+  consecutive `sum` values, and for the oldest row it computes `sum − 0` — a raw
+  meter reading as `sum` puts the entire reading (~11 MWh) into the first month.
+  `sum` must also never decrease. There is no `last_reset` for external statistics.
+- The baseline is read back from the recorder (`state − sum` of the oldest stored
+  row), falling back to the earliest reading when nothing is stored. It is not kept
+  in the config entry. That keeps re-imports consistent after the portal's window
+  has moved past the first import.
 - Imports are idempotent on `(statistic_id, start)`, so the full ~14 months can be
   rewritten on every backfill without diffing.
+- The row logic lives in `series.py` with no HA imports, so `tests/test_series.py`
+  covers it without installing Home Assistant.
+- A `DataUpdateCoordinator` only reschedules while it has listeners. The history
+  coordinator has no entities, so `__init__.py` gives it a no-op listener — without
+  it the backfill runs once at setup and never again.
 
 **Known limitation, document it in the README:** monthly values render in the Energy
 Dashboard as one bar per month, not as a smooth curve. Linear distribution across the

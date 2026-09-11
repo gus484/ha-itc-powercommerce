@@ -2,3 +2,5 @@
 pytest>=8.0
 pytest-asyncio>=0.23
 aioresponses>=0.7.6
+# zoneinfo has no timezone database on Windows; the series tests need Europe/Berlin.
+tzdata

@@ -1,9 +1,9 @@
 {
   "domain": "itc_powercommerce",
   "name": "ITC PowerCommerce",
-  "after_dependencies": ["recorder"],
   "codeowners": ["@gus484"],
   "config_flow": true,
+  "dependencies": ["recorder"],
   "documentation": "https://github.com/gus484/ha-itc-powercommerce",
   "integration_type": "hub",
   "iot_class": "cloud_polling",

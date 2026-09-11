@@ -29,7 +29,17 @@ Not available yet. The target is installation via HACS as a custom repository.
 ## Known limitations
 
 - The portal only provides **monthly** values. In the Energy Dashboard these render as
-  one bar per month, not as a smooth curve. That is expected, not a bug.
+  one bar per month, not as a smooth curve. That is expected, not a bug. Day and week
+  views show nothing useful.
+- The **first imported month shows 0 kWh**. There is no earlier reading to take a
+  difference against.
+- **Missing months are merged into the next reading.** If the portal has no reading
+  for October and November, the December bar holds all three months. Two readings in
+  one month (a self-reported one plus the regular one) simply add up in that month.
+- In the Energy Dashboard, pick the statistic named **"Strom &lt;meter number&gt;"**
+  (`itc_powercommerce:…`) as grid consumption, **not** the meter-reading sensor.
+  The sensor only knows readings from the day it was set up; the statistic carries
+  the backfilled history. Adding both counts the consumption twice.
 - Home Assistant stores config entry credentials in `.storage` in plain text.
 
 ## Development
