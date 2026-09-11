@@ -5,26 +5,91 @@ Home Assistant integration for German utility customer portals built on the
 portal and imports them into the Energy Dashboard.
 
 The platform is used by a number of municipal utilities. Portal URLs follow the pattern
-`<host>/powercommerce/<mandant>/fo/portal/<view>`. The first supported tenant is
-Stadtwerke Elbtal (`swet`); other utilities on the same platform can be added.
+`<host>/powercommerce/<tenant>/fo/portal/<view>`. The first supported tenant is
+Stadtwerke Elbtal (`swet`); other utilities on the same platform can be set up by
+entering host and tenant by hand.
 
-> **Status: work in progress.** Phase 1 (standalone client) is done and covered by
-> tests. The Home Assistant integration itself is under construction — this repository
-> is not installable via HACS yet.
+> **Status: no release yet.** The integration works and has been verified on a test
+> instance, but there is no tagged release. Until there is, HACS installs the latest
+> commit instead of a version.
 
-## Planned scope
+## What it does
 
-- Current meter reading as a sensor (`device_class: energy`,
-  `state_class: total_increasing`)
-- Roughly 14 months of history backfilled as external statistics, so the readings show
-  up in the Energy Dashboard
-- Config flow with utility selection, credential validation against a real login, and
-  reauth
+- **Meter reading sensor** — the current cumulative reading in kWh
+  (`device_class: energy`, `state_class: total_increasing`), grouped under a device
+  named after the meter. Attributes:
+  - `meter_number`
+  - `reading_date` — the date of the reading, not of the poll
+  - `reading_source` — `read`, `estimated` or `self_reported`, where the portal
+    discloses it
+- **History backfill** — the roughly 14 months of readings the portal keeps are
+  imported as an external statistic named **"Strom &lt;meter number&gt;"**
+  (`itc_powercommerce:<tenant>_<meter number>_energy`), so the Energy Dashboard
+  shows consumption from before the day you set the integration up. Readings that
+  later drop out of the portal's window stay in Home Assistant.
+- **Two polling rhythms** — the current reading comes from a small JSON endpoint and
+  is fetched every 12 hours; the history is a full page and is fetched once a day.
 - Electricity only. Read-only — the integration never submits readings to the portal.
+
+## Requirements
+
+- Home Assistant 2025.2 or newer, with the recorder enabled (it is by default)
+- A login for your utility's customer portal **without two-factor authentication**
 
 ## Installation
 
-Not available yet. The target is installation via HACS as a custom repository.
+### HACS (recommended)
+
+1. In HACS, open the menu (⋮) at the top right and choose **Custom repositories**.
+2. Enter `https://github.com/gus484/ha-itc-powercommerce`, pick the type
+   **Integration**, and add it.
+3. Search for **ITC PowerCommerce** in HACS and download it.
+4. Restart Home Assistant.
+
+### Manual
+
+Copy `custom_components/itc_powercommerce/` from this repository into the
+`custom_components/` folder of your Home Assistant configuration directory, then
+restart Home Assistant.
+
+## Configuration
+
+**Settings → Devices & services → Add integration → ITC PowerCommerce**
+
+1. **Utility** — pick yours from the list. If it is not listed, choose
+   **Andere / Other** and enter host and tenant from your portal's URL. For
+   Stadtwerke Elbtal the URL is
+   `https://onlineservice.stadtwerke-elbtal.de/powercommerce/swet/fo/portal/`: the
+   part before `/powercommerce` is the host, the part after it (`swet`) the tenant.
+2. **Login** — the email address and password you use on the portal. They are checked
+   by an actual login before anything is saved. A meter can only be added once.
+
+### Energy Dashboard
+
+**Settings → Dashboards → Energy → Electricity grid → Add consumption**, then pick the
+statistic **"Strom &lt;meter number&gt;"**. Do **not** add the meter-reading sensor as
+well: it only knows readings from the day it was set up, and adding both counts the
+consumption twice.
+
+### Options
+
+**Settings → Devices & services → ITC PowerCommerce → Configure**
+
+| Option | Default | Range |
+|---|---|---|
+| Current reading, every … hours | 12 | 1–168 |
+| Reading history, every … hours | 24 | 24–168 |
+
+Saving reloads the integration. The portal updates readings monthly at best, so
+shorter intervals do not bring newer data. They do bring more logins, since the portal
+session usually expires between polls — and repeated failed logins can lock your
+portal account.
+
+### Re-authentication
+
+If the portal rejects the stored credentials, for example after a password change,
+Home Assistant shows a re-authentication prompt. Check that you can still log in on
+the portal's website before retrying, so failed attempts do not add up to a lock.
 
 ## Known limitations
 
@@ -46,11 +111,35 @@ Not available yet. The target is installation via HACS as a custom repository.
     looks too high and May too low.
   - Two readings in one month (for example a self-reported one plus the regular one)
     simply add up in that month.
-- In the Energy Dashboard, pick the statistic named **"Strom &lt;meter number&gt;"**
-  (`itc_powercommerce:…`) as grid consumption, **not** the meter-reading sensor.
-  The sensor only knows readings from the day it was set up; the statistic carries
-  the backfilled history. Adding both counts the consumption twice.
-- Home Assistant stores config entry credentials in `.storage` in plain text.
+- **Two-factor authentication is not supported.** With 2FA enabled on the account,
+  setup fails with "Invalid credentials, or the portal requires a two-factor code."
+- Electricity only. Gas, water and district heating meters on the same account are
+  ignored.
+
+## Privacy
+
+- Home Assistant stores config entry credentials in `.storage` in **plain text**. Anyone
+  with access to your configuration directory or an unencrypted backup can read your
+  portal password.
+- **Diagnostics** (integration menu → *Download diagnostics*) are meant for bug
+  reports. Username, password, meter number, customer number, name, address and email
+  are redacted, and the statistic id is left out because it contains the meter
+  number. Look through the file before you post it anyway.
+
+## Troubleshooting
+
+Enable debug logging in `configuration.yaml` and restart:
+
+```yaml
+logger:
+  default: warning
+  logs:
+    custom_components.itc_powercommerce: debug
+```
+
+If the portal changes its page layout, the history import fails with a parse error in
+the log while the current reading keeps working. Please open an issue with the log
+lines and a diagnostics file.
 
 ## Development
 
@@ -61,7 +150,8 @@ python -m venv .venv
 ```
 
 The parser tests run against anonymized fixtures in `tests/fixtures/` and are the
-early-warning system for portal markup changes.
+early-warning system for portal markup changes. CI runs `hassfest`, the HACS
+validation and `pytest` on every push and pull request, and weekly.
 
 ## License
 
