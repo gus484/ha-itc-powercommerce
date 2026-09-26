@@ -9,10 +9,6 @@ The platform is used by a number of municipal utilities. Portal URLs follow the 
 Stadtwerke Elbtal (`swet`); other utilities on the same platform can be set up by
 entering host and tenant by hand.
 
-> **Status: no release yet.** The integration works and has been verified on a test
-> instance, but there is no tagged release. Until there is, HACS installs the latest
-> commit instead of a version.
-
 ## What it does
 
 - **Meter reading sensor** — the current cumulative reading in kWh
