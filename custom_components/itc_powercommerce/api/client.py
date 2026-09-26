@@ -32,6 +32,7 @@ from yarl import URL
 from .exceptions import AuthError, ParseError, PortalError, SessionExpired
 from .models import Meter, Reading
 from .parsing import (
+    has_reading_history,
     is_login_page,
     parse_latest_readings,
     parse_meter_widget,
@@ -208,7 +209,22 @@ class ITCPowerCommerceClient:
         itself returns the full available history.
         """
         self._require_login()
-        html = await self._ensure_session(lambda: self._get_meter_details())
+        html = await self._ensure_session(self._get_meter_details)
+        if not has_reading_history(html):
+            # An absent table is not yet proof of a markup change. On an
+            # expired session the portal answers HTTP 200 from
+            # cockpitRedirect?loginWidgetOnly=true — a login *widget* that
+            # carries neither the history nor the `loginProcessForm` marker, so
+            # `is_login_page` never fires and the expiry goes unnoticed. That
+            # blind spot cost 13 days of silently failing backfills.
+            # Retry on a fresh login; if the table is still missing the parser
+            # raises ParseError, which reaches Home Assistant as UpdateFailed
+            # and never as a reauth prompt — so an account whose history is
+            # genuinely empty cannot be driven into a login loop.
+            _LOGGER.info("meterDetails carried no history, retrying on a fresh login")
+            self._logged_in = False
+            await self.login()
+            html = await self._get_meter_details()
         readings = parse_reading_history(html, meter_no)
         if start is not None:
             readings = [r for r in readings if r.reading_date >= start]
@@ -217,7 +233,15 @@ class ITCPowerCommerceClient:
         return readings
 
     async def _get_meter_details(self) -> str:
-        html = await self._get_text("meterDetails")
+        async with self._session.get(
+            self._url("meterDetails"), headers={"User-Agent": USER_AGENT}
+        ) as resp:
+            html = await resp.text()
+            # The final URL is what identified the expired-session response in
+            # the first place: HTTP 200, but from cockpitRedirect rather than
+            # meterDetails. Kept because it is the one signal that distinguishes
+            # "logged out" from "markup changed" without parsing anything.
+            _LOGGER.debug("meterDetails -> HTTP %s at %s", resp.status, resp.url)
         if is_login_page(html):
             raise SessionExpired("meterDetails returned the login page")
         return html

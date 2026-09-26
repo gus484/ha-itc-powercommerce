@@ -11,7 +11,7 @@ import pytest
 from aioresponses import aioresponses
 from yarl import URL
 
-from api import AuthError, ITCPowerCommerceClient
+from api import AuthError, ITCPowerCommerceClient, ParseError
 from api.client import METER_WIDGET_VIEW
 
 BASE = "https://onlineservice.stadtwerke-elbtal.de/powercommerce/swet/fo/portal"
@@ -166,4 +166,55 @@ async def test_session_expiry_gives_up_after_one_retry(
         m.get(f"{BASE}/meterDetails", body=login_page)
         await client.login()
         with pytest.raises(AuthError):
+            await client.get_readings("1LAB0000000001")
+
+
+# Stand-in, not a capture. The expired-session response is known by its URL
+# (cockpitRedirect?loginWidgetOnly=true, HTTP 200) but its body has never been
+# recorded. All the test needs to pin down is the shape that broke production —
+# a page that is not the login page and carries no history table.
+NO_HISTORY_PAGE = "<html><body><div>Ihre Sitzung ist abgelaufen.</div></body></html>"
+
+
+async def test_missing_history_retries_on_a_fresh_login(
+    client, login_page, home_page, meter_details
+) -> None:
+    """The failure seen in production: expiry that does not look like expiry.
+
+    The portal drops the history table without rendering the login page, so
+    the expiry passes `is_login_page` unnoticed. Left alone this never
+    recovers, because the client goes on believing it is logged in.
+    """
+    with aioresponses() as m:
+        m.get(f"{BASE}/start", body=login_page)
+        m.post(f"{BASE}/loginProcess", body=home_page)
+        # session is gone, but the response is not the login page
+        m.get(f"{BASE}/meterDetails", body=NO_HISTORY_PAGE)
+        # re-login
+        m.get(f"{BASE}/start", body=login_page)
+        m.post(f"{BASE}/loginProcess", body=home_page)
+        m.get(f"{BASE}/meterDetails", body=meter_details)
+        await client.login()
+        readings = await client.get_readings("1LAB0000000001")
+    assert len(readings) == 12
+
+
+async def test_missing_history_after_retry_is_a_parse_error_not_auth(
+    client, login_page, home_page
+) -> None:
+    """A history that stays empty must not trigger the reauth dialog.
+
+    ParseError reaches Home Assistant as UpdateFailed. AuthError would open
+    the reauth prompt and invite repeated logins against an account that is
+    fine — the portal locks accounts for that.
+    """
+    with aioresponses() as m:
+        m.get(f"{BASE}/start", body=login_page)
+        m.post(f"{BASE}/loginProcess", body=home_page)
+        m.get(f"{BASE}/meterDetails", body=NO_HISTORY_PAGE)
+        m.get(f"{BASE}/start", body=login_page)
+        m.post(f"{BASE}/loginProcess", body=home_page)
+        m.get(f"{BASE}/meterDetails", body=NO_HISTORY_PAGE)
+        await client.login()
+        with pytest.raises(ParseError):
             await client.get_readings("1LAB0000000001")
