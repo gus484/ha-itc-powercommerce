@@ -104,6 +104,20 @@ def parse_latest_readings(payload: dict) -> list[Reading]:
     return readings
 
 
+def has_reading_history(html: str) -> bool:
+    """True if ``html`` carries the meterDetails reading-history table.
+
+    Asked before parsing, because an absent table has two very different
+    causes — a changed portal markup, or a server-side session that is gone
+    without the portal rendering the login page. The caller needs to tell
+    them apart. Deliberately runs the same query as
+    :func:`parse_reading_history` so the two can never disagree about what
+    counts as a table.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    return bool(soup.find_all("td", attrs={"data-title": "Datum"}))
+
+
 def parse_reading_history(html: str, meter_no: str) -> list[Reading]:
     """Parse the reading-history table on the ``meterDetails`` page.
 
