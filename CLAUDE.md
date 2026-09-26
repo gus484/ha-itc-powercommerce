@@ -37,6 +37,10 @@ other utilities on the same platform.
   `meterValue` (zero-padded string, e.g. `000013364,00`), `readingDate`
   (`DD.MM.YYYY`). Cheap. Preferred source for the current value.
   Sibling endpoints exist: `invoiceWidget.json`, `budgetBillingPlanWidget.json`.
+- **On an expired session `meterDetails` does not 401 or 302 to the login page.** It
+  answers HTTP 200 from
+  `cockpitRedirect?loginWidgetOnly=true&target_controller=/meterDetails`. See the
+  session-expiry convention below.
 - **Reading history as HTML** on `/powercommerce/swet/fo/portal/meterDetails`, with
   `<td data-title="Datum">` and `<td data-title="Zählerstand">` cells. German number
   formatting: `.` thousands separator, `,` decimal (`13.114,7 kWh`). The capture spans
@@ -50,11 +54,27 @@ other utilities on the same platform.
 - **Parse the known field names directly.** The earlier instruction to collect all
   `<input type="hidden">` generically was written for the assumed Web Flow and is now
   obsolete — there are no hidden fields to echo. Ignore it wherever it still appears.
-- **Detect session expiry by checking whether a response is the login page**, not by
-  parsing the wrong document. On expiry, re-login exactly once, then fail with
-  `AuthError`. Whether `SessionExpired` still needs to be a distinct exception depends
-  on whether Phase 1 ever raises it — if it does not, collapse it into `AuthError`
-  rather than carrying a dead class into the integration.
+- **Session expiry has two different shapes; one login-page check is not enough.**
+  The portal renders login twice. `meterWidget.json` on a dead session returns the
+  full login page, which the `loginProcessForm` marker catches. `meterDetails` instead
+  **redirects to `cockpitRedirect?loginWidgetOnly=true&target_controller=/meterDetails`
+  with HTTP 200** — a login *widget* without that marker. Verified in production on
+  2026-09-26 after the backfill had silently failed for 13 consecutive days.
+  Consequences:
+  - Expiry is the **normal** case, not an edge case. The session is dead by every
+    poll; the meter coordinator re-logs in on every single run.
+  - For the HTML path, treat an absent history table as possible expiry, re-login
+    once, then refetch. Do not guess a markup marker for the widget page — that guess
+    is what produced the 13-day blind spot.
+  - After the retry, a still-absent table must raise `ParseError` → `UpdateFailed`,
+    **never `AuthError`**. An account whose history is legitimately empty would
+    otherwise be driven into the reauth dialog and repeated logins, which is how the
+    portal locks accounts.
+  - `SessionExpired` is load-bearing and stays a distinct exception. The earlier note
+    about collapsing it into `AuthError` is obsolete.
+  - The final response URL after redirects is the precise expiry signal, and it is
+    logged. Detection keyed on "the URL is no longer the view we asked for" would be
+    cheaper than the retry; it is a candidate refinement, not yet implemented.
 - **Do not hammer the portal.** Repeated failed logins can lock the account. During
   development, work against cached responses.
 - **The parser test is the priority test.** It is the early-warning system for portal
